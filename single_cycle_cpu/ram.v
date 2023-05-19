@@ -1,10 +1,10 @@
-module ram #(parameter SIZE = 7, WORD = 32)
+module ram #(parameter SIZE = 13, WORD = 32) // 2 ^ 13 = 8192 byte
             (input CLK,
              input WE,
-             input [SIZE-1:0] A,
+             input [WORD-1:0] A,
              input [WORD-1:0] WD,
              output [WORD-1:0] RD );
-    reg [WORD-1:0] mem [2**SIZE-1:0];
+    reg [WORD-1:0] mem [2**SIZE-1:0] /*verilator public*/;
 
     always @(posedge CLK)
     begin
