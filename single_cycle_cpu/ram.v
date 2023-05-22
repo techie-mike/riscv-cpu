@@ -1,4 +1,4 @@
-module ram #(parameter SIZE = 13, WORD = 32) // 2 ^ 13 = 8192 byte
+module ram #(parameter SIZE = 14, WORD = 32) // 2 ^ 13 = 16384 byte
             (input CLK,
              input WE,
              input [WORD-1:0] A,
@@ -11,5 +11,5 @@ module ram #(parameter SIZE = 13, WORD = 32) // 2 ^ 13 = 8192 byte
         if (WE)
             mem[A] <= WD;
     end
-    assign RD = mem[A];
+    assign RD = mem[A[15:2]];
 endmodule

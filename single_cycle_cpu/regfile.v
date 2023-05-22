@@ -3,7 +3,7 @@ module regfile(input CLK,
                input [4:0] A1, A2, A3,
                output [31:0] RD1, RD2,
                input [31:0] WD3);
-    reg [31:0] regs [31:0];
+    reg [31:0] regs [31:0] /*verilator public*/;
     always @(posedge CLK)
     begin
         if(WE3)
