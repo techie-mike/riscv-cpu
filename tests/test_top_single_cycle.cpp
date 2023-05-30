@@ -28,11 +28,15 @@ constexpr uint32_t RISCV_INST_START = 0x1000;
 
 void DumpRegisters(const IData registers[]);
 void WriteValueInMem(IData *mem, size_t pos, IData value);
+int32_t ReadValueInMem(IData *mem, size_t pos);
 
 void Test1();
+void TestSW();
+
 
 int main(int argc, char** argv, char** env) {
-    Test1();
+    // Test1();
+    TestSW();
     printf("\033[92m==================TESTS=PASSED==================\n");
     exit(EXIT_SUCCESS);
 }
@@ -59,6 +63,7 @@ void Test1()
     // Inst: lw x6, -4(x9)
     // Init value: reg[x9] = 0x2004
     //             mem[0x2000] = 10
+    // Result: reg[x6] = 10
     // --------
 
     printf("==================RUNING=TEST=1==================\n");
@@ -110,7 +115,77 @@ void Test1()
     printf("==================ENDED=TEST=1==================\n");
 }
 
+void TestSW()
+{
+    // Test lw
+    // --------
+    // Inst: lw x6, -4(x9)
+    //       sw x6, 8(x9)
+    // Init value: reg[x9] = 0x2004
+    //             mem[0x2000] = 10
+    // Result: mem[0x200C] = 10
+    // --------
+
+    printf("==================RUNING=TESTSW==================\n");
+    Vtop_single_cycle *top = new Vtop_single_cycle;
+    Verilated::traceEverOn(true);
+    VerilatedVcdC *m_trace = new VerilatedVcdC;
+    top->trace(m_trace, 5);
+    m_trace->open("waveform_single_cycle.vcd");
+
+    // Load program in instruction memory
+    std::array<uint32_t, 20 + RISCV_INST_START> init_inst_mem = {};
+    std::array<uint32_t, 20> program = {
+        0xffc4a303,  // lw x6, -4(x9)
+        0x0064A423,  // sw x6,  8(x9)
+    };
+    auto iter_mem {init_inst_mem.begin()};
+    iter_mem += RISCV_INST_START >> 2;
+    std::copy(program.begin(), program.end(), iter_mem);
+    std::copy(init_inst_mem.begin(), init_inst_mem.end(), top->top_single_cycle->inst_mem->mem);
+
+    // std::cerr << std::hex << (int)init_inst_mem[0x1000 >> 2] << "\n";
+    // std::cerr << std::hex << (int)top->top_single_cycle->inst_mem->mem[0x1000 >> 2] << "\n";
+
+    WriteValueInMem(top->top_single_cycle->data_mem->mem, 0x2000, 10);
+    top->top_single_cycle->regfile->regs[9] = 0x2004;
+    top->top_single_cycle->REG_WRITE = 1;
+    top->top_single_cycle->IMM_SRC = 0;
+    top->top_single_cycle->MEM_WR = 0;
+    top->CLK = 0;
+
+    while (sim_time < 6) {
+        top->CLK ^= 1;
+        if (sim_time >= 2) {
+            top->top_single_cycle->MEM_WR = 1;
+            top->top_single_cycle->IMM_SRC = 1;
+        }
+
+        top->eval();
+        m_trace->dump(sim_time);
+
+        // Check instruction memory
+        // if (program.at(sim_time / 2) != top->top_single_cycle->INSTR) {
+        //     std::cerr << "Program in instruction memory not equal with loaded program!" << "\n";
+        //     std::cerr << std::hex << program.at(sim_time) << " " << top->top_single_cycle->INSTR;
+        //     exit(EXIT_FAILURE);
+        // }
+
+        DumpRegisters(top->top_single_cycle->regfile->regs);
+        sim_time++;
+    }
+    m_trace->close();
+    assert(ReadValueInMem(top->top_single_cycle->data_mem->mem, 0x200C) == 10);
+    delete top;
+    printf("==================ENDED=TESTSW==================\n");
+}
+
 void WriteValueInMem(IData *mem, size_t pos, IData value)
 {
     mem[pos >> 2] = value;
+}
+
+int32_t ReadValueInMem(IData *mem, size_t pos)
+{
+    return mem[pos >> 2];
 }
