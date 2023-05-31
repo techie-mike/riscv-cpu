@@ -10,6 +10,7 @@ $PATH_SRC/pc.v     \
 $PATH_SRC/ram.v     \
 $PATH_SRC/regfile.v \
 $PATH_SRC/extend.v  \
+$PATH_SRC/mux_2.v  \
 $PATH_SRC/alu.v"
 
 verilator --cc $FILE $DEPENDES --trace "-I$PATH_SRC"

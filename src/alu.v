@@ -7,6 +7,12 @@ module alu(input [31:0] SRC_A,
         case(ALU_CONTROL)
             `ALU_ADD:
                 assign RES = SRC_A + SRC_B;
+            `ALU_SUB:
+                assign RES = SRC_A - SRC_B;
+            `ALU_AND:
+                assign RES = SRC_A & SRC_B;
+            `ALU_OR:
+                assign RES = SRC_A | SRC_B;
 
             default:
                 ;

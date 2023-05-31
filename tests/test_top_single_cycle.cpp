@@ -22,30 +22,31 @@
 
 
 #define MAX_TIME 20
-vluint64_t sim_time = 0;
 
 constexpr uint32_t RISCV_INST_START = 0x1000;
 
-void DumpRegisters(const IData registers[]);
+void DumpRegisters(const IData registers[], const IData pc);
 void WriteValueInMem(IData *mem, size_t pos, IData value);
 int32_t ReadValueInMem(IData *mem, size_t pos);
 
 void Test1();
 void TestSW();
-
+void TestOR();
 
 int main(int argc, char** argv, char** env) {
-    // Test1();
+    Test1();
     TestSW();
+    TestOR();
     printf("\033[92m==================TESTS=PASSED==================\n");
     exit(EXIT_SUCCESS);
 }
 
-void DumpRegisters(const IData registers[])
+void DumpRegisters(const IData registers[], const IData pc)
 {
     constexpr int HEIGHT = 11;
     constexpr int LENGTH = 32 / HEIGHT + 1;
     printf("------DUMP-REGISTERS-STATE------\n");
+    printf("[pc]  = %#x\n", pc);
     for (int row = 0; row < HEIGHT; row++) {
         for (int col = 0; col < LENGTH; col++) {
             printf("[x%2d] = %-#10x (%-10d)\t", col * HEIGHT + row, registers[col * HEIGHT + row], registers[col * HEIGHT + row]);
@@ -53,7 +54,6 @@ void DumpRegisters(const IData registers[])
         printf("\n");
     }
     printf("------DUMP-REGISTERS-STATE------\n\n");
-
 }
 
 void Test1()
@@ -67,6 +67,7 @@ void Test1()
     // --------
 
     printf("==================RUNING=TEST=1==================\n");
+    vluint64_t sim_time = 0;
     Vtop_single_cycle *top = new Vtop_single_cycle;
     Verilated::traceEverOn(true);
     VerilatedVcdC *m_trace = new VerilatedVcdC;
@@ -93,6 +94,11 @@ void Test1()
     top->top_single_cycle->data_mem->mem[0x2000] = 10;
     WriteValueInMem(top->top_single_cycle->data_mem->mem, 0x2000, 10);
     top->top_single_cycle->regfile->regs[9] = 0x2004;
+    top->top_single_cycle->REG_WRITE = 1;
+    top->top_single_cycle->IMM_SRC = 0;
+    top->top_single_cycle->MEM_WR = 0;
+    top->top_single_cycle->ALU_SRC = 1;
+    top->top_single_cycle->RESULT_SRC = 1;
     top->CLK = 0;
     while (sim_time < 4) {
         top->CLK ^= 1;
@@ -106,7 +112,7 @@ void Test1()
             exit(EXIT_FAILURE);
         }
 
-        DumpRegisters(top->top_single_cycle->regfile->regs);
+        DumpRegisters(top->top_single_cycle->regfile->regs, top->top_single_cycle->PC);
         sim_time++;
     }
     m_trace->close();
@@ -127,6 +133,7 @@ void TestSW()
     // --------
 
     printf("==================RUNING=TESTSW==================\n");
+    vluint64_t sim_time = 0;
     Vtop_single_cycle *top = new Vtop_single_cycle;
     Verilated::traceEverOn(true);
     VerilatedVcdC *m_trace = new VerilatedVcdC;
@@ -152,6 +159,8 @@ void TestSW()
     top->top_single_cycle->REG_WRITE = 1;
     top->top_single_cycle->IMM_SRC = 0;
     top->top_single_cycle->MEM_WR = 0;
+    top->top_single_cycle->ALU_SRC = 1;
+    top->top_single_cycle->RESULT_SRC = 1;
     top->CLK = 0;
 
     while (sim_time < 6) {
@@ -165,19 +174,103 @@ void TestSW()
         m_trace->dump(sim_time);
 
         // Check instruction memory
-        // if (program.at(sim_time / 2) != top->top_single_cycle->INSTR) {
-        //     std::cerr << "Program in instruction memory not equal with loaded program!" << "\n";
-        //     std::cerr << std::hex << program.at(sim_time) << " " << top->top_single_cycle->INSTR;
-        //     exit(EXIT_FAILURE);
-        // }
+        if (program.at(sim_time / 2) != top->top_single_cycle->INSTR) {
+            std::cerr << "Program in instruction memory not equal with loaded program!" << "\n";
+            std::cerr << std::hex << program.at(sim_time) << " " << top->top_single_cycle->INSTR;
+            exit(EXIT_FAILURE);
+        }
 
-        DumpRegisters(top->top_single_cycle->regfile->regs);
+        if (sim_time % 2 == 0) {
+            DumpRegisters(top->top_single_cycle->regfile->regs, top->top_single_cycle->PC);
+        }
         sim_time++;
     }
     m_trace->close();
     assert(ReadValueInMem(top->top_single_cycle->data_mem->mem, 0x200C) == 10);
     delete top;
     printf("==================ENDED=TESTSW==================\n");
+}
+
+void TestOR()
+{
+    // Test or
+    // --------
+    // Inst: lw x6, -4(x9)
+    //       sw x6, 8(x9)
+    //       or x4, x5, x6
+    // Init value: reg[x9] = 0x2004
+    //             reg[x5] = 6
+    //             mem[0x2000] = 10
+    // Result: reg[x4] = 14
+    // --------
+
+    printf("==================RUNING=TESTOR==================\n");
+    vluint64_t sim_time = 0;
+    Vtop_single_cycle *top = new Vtop_single_cycle;
+    Verilated::traceEverOn(true);
+    VerilatedVcdC *m_trace = new VerilatedVcdC;
+    top->trace(m_trace, 5);
+    m_trace->open("waveform_single_cycle.vcd");
+
+    // Load program in instruction memory
+    std::array<uint32_t, 20 + RISCV_INST_START> init_inst_mem = {};
+    std::array<uint32_t, 20> program = {
+        0xffc4a303,  // lw x6, -4(x9)
+        0x0064A423,  // sw x6,  8(x9)
+        0x0062E233,  // or x4, x5, x6
+    };
+    auto iter_mem {init_inst_mem.begin()};
+    iter_mem += RISCV_INST_START >> 2;
+    std::copy(program.begin(), program.end(), iter_mem);
+    std::copy(init_inst_mem.begin(), init_inst_mem.end(), top->top_single_cycle->inst_mem->mem);
+
+    // std::cerr << std::hex << (int)init_inst_mem[0x1000 >> 2] << "\n";
+    // std::cerr << std::hex << (int)top->top_single_cycle->inst_mem->mem[0x1000 >> 2] << "\n";
+
+    WriteValueInMem(top->top_single_cycle->data_mem->mem, 0x2000, 10);
+    top->top_single_cycle->regfile->regs[9] = 0x2004;
+    top->top_single_cycle->regfile->regs[5] = 6;
+    top->top_single_cycle->REG_WRITE = 1;
+    top->top_single_cycle->IMM_SRC = 0;
+    top->top_single_cycle->MEM_WR = 0;
+    top->top_single_cycle->ALU_SRC = 1;
+    top->top_single_cycle->RESULT_SRC = 1;
+    top->CLK = 0;
+
+    while (sim_time < 7) {
+        top->CLK ^= 1;
+        if (sim_time == 2 || sim_time == 3) {
+            top->top_single_cycle->MEM_WR = 1;
+            top->top_single_cycle->IMM_SRC = 1;
+        }
+
+        if (sim_time == 4 || sim_time == 5) {
+            top->top_single_cycle->MEM_WR = 0;
+            top->top_single_cycle->REG_WRITE = 1;
+            top->top_single_cycle->ALU_SRC = 0;
+            top->top_single_cycle->RESULT_SRC = 0;
+            top->top_single_cycle->ALU_CONTROL = 3;
+        }
+
+        top->eval();
+        m_trace->dump(sim_time);
+
+        // Check instruction memory
+        if (program.at(sim_time / 2) != top->top_single_cycle->INSTR) {
+            std::cerr << "Program in instruction memory not equal with loaded program!" << "\n";
+            std::cerr << std::hex << program.at(sim_time) << " " << top->top_single_cycle->INSTR;
+            exit(EXIT_FAILURE);
+        }
+
+        if (sim_time % 2 == 0) {
+            DumpRegisters(top->top_single_cycle->regfile->regs, top->top_single_cycle->PC);
+        }
+        sim_time++;
+    }
+    m_trace->close();
+    assert(top->top_single_cycle->regfile->regs[4] == 14);
+    delete top;
+    printf("==================ENDED=TESTOR==================\n");
 }
 
 void WriteValueInMem(IData *mem, size_t pos, IData value)
