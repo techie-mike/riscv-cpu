@@ -11,9 +11,13 @@ $PATH_SRC/ram.v     \
 $PATH_SRC/regfile.v \
 $PATH_SRC/extend.v  \
 $PATH_SRC/mux_2.v  \
+$PATH_SRC/mux_3.v  \
+$PATH_SRC/controller.v  \
+$PATH_SRC/maindec.v  \
+$PATH_SRC/aludec.v  \
 $PATH_SRC/alu.v"
 
-verilator --cc $FILE $DEPENDES --trace "-I$PATH_SRC"
+verilator --cc $FILE --trace "-I$PATH_SRC"
 verilator  --trace -cc $FILE --exe $TEST_FILE "-I$PATH_SRC"
 make -C obj_dir/ -f Vtop_single_cycle.mk Vtop_single_cycle
 ./obj_dir/Vtop_single_cycle

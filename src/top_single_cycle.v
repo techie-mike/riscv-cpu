@@ -1,9 +1,12 @@
 module top_single_cycle(input CLK);
     logic [31:0] PC /*verilator public*/;
-    logic [31:0] PC_NEW;
+    logic [31:0] PC_CALC /*verilator public*/;
+    logic [31:0] PC_NEXT /*verilator public*/;
+    logic [31:0] PC_JUMP /*verilator public*/;
+
     pc pc (.CLK (CLK),
            .PC (PC),
-           .PC_NEXT(PC_NEW));
+           .PC_NEXT(PC_NEXT));
 
     logic [31:0] INSTR /*verilator public*/;
     logic [31:0] READ_DATA;
@@ -17,13 +20,17 @@ module top_single_cycle(input CLK);
     logic MEM_WR            /*verilator public*/;
     logic [31:0] ALU_RESULT /*verilator public*/;
     logic ALU_SRC           /*verilator public*/;
-    logic RESULT_SRC        /*verilator public*/;
+    logic [1:0] RESULT_SRC  /*verilator public*/;
     logic [2:0] ALU_CONTROL /*verilator public*/;
+    logic ZERO_FLAG         /*verilator public*/;
+    logic PC_SRC            /*verilator public*/;
+
     /* CONTROL SIGNALS */
 
     logic [31:0] RES_MUX_SRC_ALU;
     logic [31:0] RESULT;
 
+    assign ZERO_FLAG = (ALU_RESULT == 0);
 
     ram inst_mem (.CLK(CLK),
                   .A  (PC),
@@ -57,15 +64,40 @@ module top_single_cycle(input CLK);
 
     adder pc_plus4(.SRC_A(PC),
                    .SRC_B(32'd4),
-                   .RES(PC_NEW));
+                   .RES(PC_CALC));
 
     mux_2 mux_src_alu(.CONTROL_SIG(ALU_SRC),
                       .SRC_0(RD2),
                       .SRC_1(IMM_EXT),
                       .RESULT(RES_MUX_SRC_ALU));
 
-    mux_2 mux_res_data_mem(.CONTROL_SIG(RESULT_SRC),
+    mux_3 mux_res_data_mem(.CONTROL_SIG(RESULT_SRC),
                            .SRC_0(ALU_RESULT),
                            .SRC_1(READ_DATA),
+                           .SRC_2(PC_CALC),
                            .RESULT(RESULT));
+
+    adder pc_target(.SRC_A(PC),
+                   .SRC_B(IMM_EXT),
+                   .RES(PC_JUMP));
+
+    mux_2 pc_src(.CONTROL_SIG(PC_SRC),
+                 .SRC_0(PC_CALC),
+                 .SRC_1(PC_JUMP),
+                 .RESULT(PC_NEXT));
+
+    logic JUMP;
+    controller controller(.OP(INSTR[6:0]),
+                          .FUNCT_3(INSTR[14:12]),
+                          .FUNCT_7_5(INSTR[30]),
+                          .ZERO(ZERO_FLAG),
+                          .RESULT_SRC(RESULT_SRC),
+                          .MEM_WRITE(MEM_WR),
+                          .PC_SRC(PC_SRC),
+                          .ALU_SRC(ALU_SRC),
+                          .REG_WRITE(REG_WRITE),
+                          .JUMP(JUMP),
+                          .IMM_SRC(IMM_SRC),
+                          .ALU_CONTROL(ALU_CONTROL));
+
 endmodule
